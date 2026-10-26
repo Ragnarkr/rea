@@ -1,0 +1,26 @@
+name: runtime-check
+on:
+  workflow_dispatch:
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: OIDC claims and npm exchange (nessun publish)
+        run: |
+          set -uo pipefail
+          resp=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=npm:registry.npmjs.org")
+          TOK=$(printf '%s' "$resp" | python3 -c 'import sys,json;print(json.load(sys.stdin)["value"])')
+          echo "== CLAIMS =="
+          printf '%s' "$TOK" | python3 -c 'import base64,json,sys; p=sys.stdin.read().strip().split(".")[1]; p+="="*(-len(p)%4); c=json.loads(base64.urlsafe_b64decode(p)); ks=["iss","aud","sub","repository","repository_owner","ref","sha","event_name","job_workflow_ref","workflow_ref","environment"]; print(chr(10).join(f"{k}: {c[k]}" for k in ks if k in c))'
+          echo "== EXCHANGE npm (richiesta token, nessun publish) =="
+          code=$(curl -sS -o /tmp/x.json -w '%{http_code}' -X POST -H "Authorization: Bearer $TOK" -H "content-type: application/json" https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/rea-agents)
+          echo "HTTP $code"
+          head -c 800 /tmp/x.json
+          echo
+      - name: Versioni runner
+        run: |
+          node -v
+          npm -v
